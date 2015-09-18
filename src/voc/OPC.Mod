@@ -10,10 +10,22 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 	CONST demoVersion = FALSE;
 
 	CONST
-		(* structure forms *)
-		Byte = 1; Bool = 2; Char = 3; SInt = 4; Int = 5; LInt = 6;
-		Real = 7; LReal = 8; Set = 9; String = 10; NilTyp = 11; NoTyp = 12;
-		Pointer = 13; ProcTyp = 14; Comp = 15;
+	(* structure forms *)
+	Byte = 1; Bool = 2; Char = 3; 
+	SInt = 4; Int = 5; LInt = 6;
+	Real = 7; LReal = 8; Set = 9; String = 10; NilTyp = 11; NoTyp = 12;
+	Pointer = 13; ProcTyp = 14;
+	Comp = 15;
+(*
+		Int8 = 7; Int16 = 8; Int32 = 9; Int64 = 10;
+		Real = 11; LReal = 12; Set = 13; String = 14; NilTyp = 15; NoTyp = 16;
+		Pointer = 17; ProcTyp = 18;
+		Comp = 19;
+*)
+		(*Real = 7; LReal = 8; Set = 9; String = 10; NilTyp = 11; NoTyp = 12;
+		Pointer = 13; ProcTyp = 14; 
+	        Int8 = 15; Int16 = 16; Int32 = 17; Int64 = 18;
+		Comp = (*15*)19;*)
 
 		(* composite structure forms *)
 		Array = 2; DynArr = 3; Record = 4;
@@ -94,7 +106,8 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 	BEGIN
 		indentLevel := 0;
 		ptrinit := OPM.ptrinit IN OPM.opt;
-		mainprog := OPM.mainprog IN OPM.opt;
+		(*mainprog := OPM.mainprog IN OPM.opt;*)
+		mainprog := OPM.mainProg OR OPM.mainLinkStat;
 		ansi := OPM.ansi IN OPM.opt;
 		IF ansi THEN BodyNameExt := "__init(void)" ELSE BodyNameExt := "__init()" END
 	END Init;
@@ -169,8 +182,9 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 				ELSE OPM.WriteStringVar(OPM.modName)
 				END ;
 				OPM.Write(Underscore)
-			ELSIF (obj = OPT.sysptrtyp^.strobj) OR (obj = OPT.bytetyp^.strobj) THEN
+			ELSIF (obj = OPT.sysptrtyp^.strobj) OR (obj = OPT.bytetyp^.strobj) (*OR (obj = OPT.int8typ^.strobj) OR (obj = OPT.int16typ^.strobj) OR (obj = OPT.int32typ^.strobj) OR (obj = OPT.int64typ^.strobj)*) THEN
 				OPM.WriteString("SYSTEM_")
+				
 			END ;
 			OPM.WriteStringVar(obj^.name)
 		END
@@ -189,7 +203,7 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 			ELSE
 				pointers := 0;
 				WHILE (typ^.strobj = NIL) & (typ^.form = Pointer) DO INC (pointers); typ := typ^.BaseTyp END ;
-				IF typ^.comp # DynArr THEN Stars (typ, openClause) END ;
+				IF (typ^.comp # DynArr) & (pointers # 0) THEN Stars (typ, openClause) END ;
 				IF pointers > 0 THEN
 					IF openClause THEN OPM.Write(OpenParen); openClause := FALSE END ;
 					WHILE pointers > 0 DO OPM.Write(Star); DEC (pointers) END
@@ -601,6 +615,7 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 		|  8: INC(adr, (-adr) MOD 8)
 		|16: INC(adr, (-adr) MOD 16)
 		ELSE (*1*)
+		   (*OPM.LogWStr("unhandled case at OPC.Align, base = "); OPM.LogWNum(base, 0); OPM.LogWLn;*)
 		END
 	END Align;
 
@@ -613,6 +628,10 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 		| SInt: RETURN OPM.SIntAlign
 		| Int: RETURN OPM.IntAlign
 		| LInt: RETURN OPM.LIntAlign
+	(*	| Int8: RETURN OPM.Int8Align
+		| Int16: RETURN OPM.Int16Align
+		| Int32: RETURN OPM.Int32Align
+		| Int64: RETURN OPM.Int64Align*)
 		| Real: RETURN OPM.RealAlign
 		| LReal: RETURN OPM.LRealAlign
 		| Set: RETURN OPM.SetAlign
@@ -622,6 +641,7 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 			IF typ^.comp = Record THEN RETURN typ^.align MOD 10000H
 			ELSE RETURN Base(typ^.BaseTyp)
 			END
+		ELSE OPM.LogWStr("unhandled case in OPC.Base, typ^form = "); OPM.LogWNum(typ^.form, 0); OPM.LogWLn;
 		END
 	END Base;
 
@@ -852,8 +872,11 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 				| OPM.lineno: OPM.Write("l")
 				| OPM.useparfile: OPM.Write("P")
 				| OPM.dontasm: OPM.Write("S")
-				| OPM.dontlink: OPM.Write("C")
+				| OPM.dontlink: OPM.Write("c")
 				| OPM.mainlinkstat: OPM.Write("M")
+				| OPM.notcoloroutput: OPM.Write("f")
+				| OPM.forcenewsym: OPM.Write("F")
+				| OPM.verbose: OPM.Write("v")
 				ELSE
 				   (* this else is necessary cause
 				   if someone defined a new option in OPM module
@@ -861,7 +884,7 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 				   if option is passed this will
 				   generate __CASECHK and cause Halt,
 				   noch *)
-	                           OPM.WriteString ("( more options defined in OPM than checked in OPC.GenHeaderMsg, if you are a compiler developer, add them to OPC.GenHeaderMsg");
+	                           OPM.LogWStr ("( more options defined in OPM than checked in OPC.GenHeaderMsg, if you are a compiler developer, add them to OPC.GenHeaderMsg"); OPM.LogWLn;
 				END
 			END
 		END;
@@ -1207,6 +1230,8 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 					OPM.WriteString(" > ");
 		|	geq :
 					OPM.WriteString(" >= ");
+		ELSE
+		   OPM.LogWStr("unhandled case in OPC.Cmp, rel = "); OPM.LogWNum(rel, 0); OPM.LogWLn;
 		END;
 	END Cmp;
 
@@ -1229,6 +1254,8 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 					END;
 		|	SInt, Int, LInt :
 					OPM.WriteInt (caseVal);
+		ELSE
+		   OPM.LogWStr("unhandled case in OPC.Case, form = "); OPM.LogWNum(form, 0); OPM.LogWLn;
 		END;
 		OPM.WriteString(Colon);
 	END Case;
@@ -1280,6 +1307,9 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 					END
 		|	SInt, Int, LInt:
 					OPM.WriteInt(con^.intval)
+(*		|	Int8, Int16, Int32, Int64:
+					OPM.WriteInt(con^.intval)*)
+
 		|	Real:
 					OPM.WriteReal(con^.realval, "f")
 		|	LReal:
@@ -1310,6 +1340,8 @@ MODULE OPC;	(* copyright (c) J. Templ 12.7.95 / 3.7.96 *)
 					OPM.Write(Quotes)
 		|	NilTyp:
 					OPM.WriteString(NilConst);
+		ELSE
+		   OPM.LogWStr("unhandled case in OPC.Constant, form = "); OPM.LogWNum(form, 0); OPM.LogWLn;
 		END;
 	END Constant;
 

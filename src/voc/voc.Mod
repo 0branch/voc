@@ -1,10 +1,10 @@
 MODULE voc;  (* J. Templ 3.2.95 *)
 
   IMPORT
-    SYSTEM, Unix, Kernel,
+    SYSTEM, Unix, Kernel := Kernel0,
     OPP, OPB, OPT,
     OPV, OPC, OPM,
-    extTools;
+    extTools, Strings, vt100;
 
 VAR mname : ARRAY 256 OF CHAR; (* noch *)
 
@@ -47,9 +47,16 @@ VAR mname : ARRAY 256 OF CHAR; (* noch *)
         IF OPM.noerr THEN
           (*IF (OPM.mainprog IN OPM.opt) & (OPM.modName # "SYSTEM") THEN*)
           IF (OPM.mainProg OR OPM.mainLinkStat) & (OPM.modName # "SYSTEM") THEN
-            OPM.DeleteNewSym; OPM.LogWStr("  main program")
+            OPM.DeleteNewSym; 
+	    IF ~OPM.notColorOutput THEN vt100.SetAttr(vt100.Green) END;
+	    OPM.LogWStr("  main program");
+	    IF ~OPM.notColorOutput THEN vt100.SetAttr(vt100.ResetAll) END;
           ELSE
-            IF new THEN OPM.LogWStr("  new symbol file"); OPM.RegisterNewSym
+            IF new THEN 
+	       IF ~OPM.notColorOutput THEN vt100.SetAttr(vt100.Green) END;
+	       OPM.LogWStr("  new symbol file");
+	       IF ~OPM.notColorOutput THEN vt100.SetAttr(vt100.ResetAll) END;
+	       OPM.RegisterNewSym
             ELSIF ext THEN OPM.LogWStr("  extended symbol file"); OPM.RegisterNewSym
             END
           END;
@@ -62,28 +69,21 @@ VAR mname : ARRAY 256 OF CHAR; (* noch *)
     OPM.CloseFiles; OPT.Close;
     OPM.LogWLn; done := OPM.noerr;
 
-(* noch *)
-        IF done THEN
-	  IF ~OPM.dontAsm THEN
-	     IF ~(OPM.mainProg OR OPM.mainLinkStat) THEN
-	        extTools.Assemble(OPM.modName);
-	     ELSE
-                IF ~OPM.dontLink THEN
-                   extTools.LinkMain (OPM.modName, OPM.mainLinkStat);
-		END;
-	     END;
-	  END;
-	END
-
 
 
   END Module;
 
   PROCEDURE Translate*;
     VAR done: BOOLEAN;
+    VAR modulesobj: ARRAY 2048 OF CHAR; (* here we hold all modules name given on the command line, to add corresponding .o files to the external compiler options *)
   BEGIN
+    modulesobj := "";
     OPM.OpenPar; (* gclock();   slightly faste rtranslation but may lead to opening "too many files" *)
     OPT.bytetyp.size := OPM.ByteSize;
+    (*OPT.int8typ.size := 1;
+    OPT.int16typ.size := 2;
+    OPT.int32typ.size := 4;
+    OPT.int64typ.size := 8;*)
     OPT.sysptrtyp.size := OPM.PointerSize;
     OPT.chartyp.size := OPM.CharSize;
     OPT.settyp.size := OPM.SetSize;
@@ -99,8 +99,24 @@ VAR mname : ARRAY 256 OF CHAR; (* noch *)
       OPM.InitOptions;
       Kernel.GC(FALSE);
       Module(done);
-      IF ~done THEN Unix.Exit(1) END
-    END
+      IF ~done THEN Unix.Exit(1) END;
+
+      (* noch *)
+        IF done THEN
+	  IF ~OPM.dontAsm THEN
+	        extTools.Assemble(OPM.modName);
+		IF ~(OPM.mainProg OR OPM.mainLinkStat) THEN Strings.Append(" ",modulesobj); Strings.Append(OPM.modName, modulesobj); Strings.Append(".o ", modulesobj) END;
+
+                IF ~OPM.dontLink & (OPM.mainProg OR OPM.mainLinkStat) THEN
+                   extTools.LinkMain (OPM.modName, OPM.mainLinkStat, modulesobj);
+		END;
+	  END;
+	END
+
+
+
+
+    END (* loop *)
   END Translate;
 
 BEGIN
